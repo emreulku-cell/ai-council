@@ -1,45 +1,116 @@
-
-<!DOCTYPE html>
+<!doctype html>
 <html lang="tr">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AI Council</title>
 <style>
-body{margin:0;background:#101827;color:white;font-family:Arial;padding:16px}
-h1{color:#60a5fa;text-align:center}
-p{color:#cbd5e1}
-textarea{width:100%;box-sizing:border-box;padding:12px;background:#1e293b;color:white;border:1px solid #64748b;border-radius:8px}
-button{padding:12px;margin:6px 4px 6px 0;border:0;border-radius:8px;background:#2563eb;color:white;font-weight:bold}
-.card{background:#1e293b;padding:14px;margin-top:12px;border-radius:12px}
-.status{color:#93c5fd}
+body{margin:0;background:#101827;color:#fff;font:16px Arial;padding:16px;max-width:850px;margin:auto}
+h1{color:#60a5fa}
+textarea,input{width:100%;box-sizing:border-box;padding:12px;background:#1e293b;color:white;border:1px solid #64748b;border-radius:8px;margin:6px 0}
+button{padding:12px;margin:6px 6px 6px 0;border:0;border-radius:8px;background:#2563eb;color:white;font-weight:bold}
+button:disabled{opacity:.45}
+.card{background:#1e293b;padding:14px;margin-top:12px;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.muted{color:#cbd5e1}
+#message{color:#93c5fd}
 </style>
 </head>
 <body>
 <h1>AI Council</h1>
-<p>3 yapay zekâ, tek karar mercii: Sen.</p>
-<textarea id="question" rows="4" placeholder="Sorunu veya projeni yaz..."></textarea>
-<button onclick="start()">Konsey Başlat</button>
-<button onclick="approve()">Sonraki Aşamayı Onayla</button>
+<p class="muted">3 yapay zekâ, karar sende. Her turda üçünün görüşünü oku ve sonraki turu onayla.</p>
+<input id="password" type="password" placeholder="Council şifresi (Render COUNCIL_PASSWORD)">
+<input id="title" placeholder="Proje başlığı">
+<textarea id="question" rows="5" placeholder="Sorunu veya projeni yaz..."></textarea>
+<div>
+<button id="start" onclick="startCouncil()">Konsey Başlat</button>
+<button id="approve" onclick="decision('approve')" disabled>Sonraki Turu Onayla</button>
+<button id="stop" onclick="decision('stop')" disabled>Bitir</button>
+</div>
+<p id="message" role="status"></p>
 <div id="results"></div>
 <script>
-let stage=0;
-function start(){
-const q=document.getElementById("question").value.trim();
-if(!q){alert("Önce bir soru yaz.");return;}
-stage=1;
-document.getElementById("results").innerHTML=
-'<div class="card"><h3>AI 1 - Analist</h3><p class="status">API bağlantısı bekleniyor.</p></div>'+
-'<div class="card"><h3>AI 2 - Eleştirmen</h3><p class="status">Onay bekleniyor.</p></div>'+
-'<div class="card"><h3>AI 3 - Sentezleyici</h3><p class="status">Onay bekleniyor.</p></div>';
+let pid=null,busy=false;
+const el=id=>document.getElementById(id);
+function buttons(status){
+el('start').disabled=busy;
+el('approve').disabled=busy||status!=='review';
+el('stop').disabled=busy||status!=='review';
 }
-function approve(){
-if(!stage){alert("Önce konseyi başlat.");return;}
-if(stage>=3){alert("Tüm aşamalar tamamlandı.");return;}
-stage++;
-const cards=document.querySelectorAll(".status");
-cards[stage-1].textContent="API bağlantısı bekleniyor.";
-alert("Aşama "+stage+" onaylandı.");
+async function api(path,method='GET',body){
+const r=await fetch(path,{
+method,
+headers:{'Content-Type':'application/json','X-Council-Password':el('password').value},
+...(body?{body:JSON.stringify(body)}:{})
+});
+let data=await r.json().catch(()=>({}));
+if(!r.ok)throw Error(typeof data.detail==='string'?data.detail:`HTTP ${r.status}`);
+return data;
+}
+async function refresh(){
+let data=await api(`/api/projects/${pid}`);
+const p=data.project;
+el('results').replaceChildren();
+for(const r of data.responses){
+const card=document.createElement('div');
+card.className='card';
+const h=document.createElement('h3');
+h.textContent=`Tur ${r.stage} — ${r.agent}`;
+const content=document.createElement('div');
+content.textContent=r.content;
+card.append(h,content);
+el('results').append(card);
+}
+buttons(p.status);
+el('message').textContent=`Proje #${pid} — Tur ${p.stage}/3 — Durum: ${p.status}`;
+return p;
+}
+async function run(){
+busy=true;buttons();
+el('message').textContent='Üç yapay zekâ çalışıyor, bekleyin...';
+try{
+await api(`/api/projects/${pid}/run`,'POST');
+await refresh();
+}catch(e){
+el('message').textContent='Hata: '+e.message;
+busy=false;
+await refresh().catch(()=>{});
+return;
+}
+busy=false;
+await refresh();
+}
+async function startCouncil(){
+if(busy)return;
+const question=el('question').value.trim();
+const title=el('title').value.trim()||question.slice(0,70);
+if(question.length<3){el('message').textContent='En az 3 karakterlik soru yaz.';return;}
+if(!el('password').value){el('message').textContent='Council şifresini gir.';return;}
+busy=true;buttons();
+try{
+const result=await api('/api/projects','POST',{title,question});
+pid=result.id;
+await run();
+}catch(e){
+busy=false;buttons();
+el('message').textContent='Hata: '+e.message;
+}
+}
+async function decision(choice){
+if(!pid||busy)return;
+busy=true;buttons();
+try{
+const d=await api(`/api/projects/${pid}/decision`,'POST',{decision:choice});
+if(choice==='approve'&&d.status==='approved'){
+await run();
+}else{
+busy=false;
+await refresh();
+}
+}catch(e){
+busy=false;
+el('message').textContent='Hata: '+e.message;
+await refresh().catch(()=>{});
+}
 }
 </script>
 </body>
