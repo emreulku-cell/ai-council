@@ -1,0 +1,46 @@
+
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Council</title>
+<style>
+body{margin:0;background:#101827;color:white;font-family:Arial;padding:16px}
+h1{color:#60a5fa;text-align:center}
+p{color:#cbd5e1}
+textarea{width:100%;box-sizing:border-box;padding:12px;background:#1e293b;color:white;border:1px solid #64748b;border-radius:8px}
+button{padding:12px;margin:6px 4px 6px 0;border:0;border-radius:8px;background:#2563eb;color:white;font-weight:bold}
+.card{background:#1e293b;padding:14px;margin-top:12px;border-radius:12px}
+.status{color:#93c5fd}
+</style>
+</head>
+<body>
+<h1>AI Council</h1>
+<p>3 yapay zekâ, tek karar mercii: Sen.</p>
+<textarea id="question" rows="4" placeholder="Sorunu veya projeni yaz..."></textarea>
+<button onclick="start()">Konsey Başlat</button>
+<button onclick="approve()">Sonraki Aşamayı Onayla</button>
+<div id="results"></div>
+<script>
+let stage=0;
+function start(){
+const q=document.getElementById("question").value.trim();
+if(!q){alert("Önce bir soru yaz.");return;}
+stage=1;
+document.getElementById("results").innerHTML=
+'<div class="card"><h3>AI 1 - Analist</h3><p class="status">API bağlantısı bekleniyor.</p></div>'+
+'<div class="card"><h3>AI 2 - Eleştirmen</h3><p class="status">Onay bekleniyor.</p></div>'+
+'<div class="card"><h3>AI 3 - Sentezleyici</h3><p class="status">Onay bekleniyor.</p></div>';
+}
+function approve(){
+if(!stage){alert("Önce konseyi başlat.");return;}
+if(stage>=3){alert("Tüm aşamalar tamamlandı.");return;}
+stage++;
+const cards=document.querySelectorAll(".status");
+cards[stage-1].textContent="API bağlantısı bekleniyor.";
+alert("Aşama "+stage+" onaylandı.");
+}
+</script>
+</body>
+</html>
